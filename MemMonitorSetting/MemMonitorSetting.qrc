@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/MemMonitorSetting">
+        <file>sel.png</file>
+    </qresource>
+</RCC>
