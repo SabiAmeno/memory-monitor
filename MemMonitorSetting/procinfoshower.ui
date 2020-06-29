@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>241</width>
-    <height>143</height>
+    <width>199</width>
+    <height>155</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -27,10 +27,26 @@
      </property>
     </widget>
    </item>
-   <item row="0" column="1">
-    <widget class="QLabel" name="label_pid">
+   <item row="1" column="1">
+    <widget class="QLabel" name="label_name">
      <property name="text">
-      <string>0</string>
+      <string>unknown</string>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::AutoText</enum>
+     </property>
+     <property name="scaledContents">
+      <bool>true</bool>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QLabel" name="label_mem">
+     <property name="text">
+      <string>0.0MB</string>
      </property>
     </widget>
    </item>
@@ -47,13 +63,6 @@
      </property>
     </widget>
    </item>
-   <item row="1" column="1">
-    <widget class="QLabel" name="label_name">
-     <property name="text">
-      <string>unknown</string>
-     </property>
-    </widget>
-   </item>
    <item row="2" column="0">
     <widget class="QLabel" name="label_5">
      <property name="maximumSize">
@@ -67,16 +76,18 @@
      </property>
     </widget>
    </item>
-   <item row="2" column="1">
-    <widget class="QLabel" name="label_mem">
+   <item row="0" column="1">
+    <widget class="QLabel" name="label_pid">
      <property name="text">
-      <string>0.0MB</string>
+      <string>0</string>
      </property>
     </widget>
    </item>
   </layout>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
- <resources/>
+ <resources>
+  <include location="MemMonitorSetting.qrc"/>
+ </resources>
  <connections/>
 </ui>

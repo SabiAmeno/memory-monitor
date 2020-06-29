@@ -117,6 +117,8 @@ void MemMonitorSetting::procInvalidProcess(DWORD pid)
     _pmm->RemoveProc(pid);
 
     procRefresh();
+
+    _tray_icon->showMessage(QString::fromLocal8Bit("提示"), QString::fromLocal8Bit("进程 %1 已退出").arg(pid));
 }
 
 void MemMonitorSetting::procRefresh()

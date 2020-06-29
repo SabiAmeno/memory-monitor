@@ -44,7 +44,10 @@ public:
 
         GetModuleBaseName(_handle, hMod, szProcessName, sizeof(szProcessName) / sizeof(TCHAR));
 
-        return &wchars2string(szProcessName)[0];
+        std::string name(&wchars2string(szProcessName)[0]);
+        size_t pos = name.find_last_of('.');
+
+        return name.substr(0, pos);
     }
     double GetProcMemory()
     {

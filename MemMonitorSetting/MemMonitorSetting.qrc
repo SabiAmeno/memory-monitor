@@ -7,5 +7,6 @@
         <file>terminate.png</file>
         <file>remove.png</file>
         <file>refresh.png</file>
+        <file>next.png</file>
     </qresource>
 </RCC>
