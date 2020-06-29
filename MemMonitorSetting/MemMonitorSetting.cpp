@@ -21,7 +21,6 @@ MemMonitorSetting::MemMonitorSetting(QWidget *parent)
     ui.treeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     ui.treeWidget->setColumnWidth(0, 30);
     ui.treeWidget->setColumnWidth(1, 30);
-    ui.treeWidget->setColumnWidth(2, 50);
 
     _thr = new std::thread(&MemMonitorSetting::run, this);
 
@@ -35,14 +34,19 @@ MemMonitorSetting::MemMonitorSetting(QWidget *parent)
     connect(_tray_icon, &QSystemTrayIcon::activated, this, &MemMonitorSetting::trayIconActived);
 }
 
+MemMonitorSetting::~MemMonitorSetting()
+{
+    std::lock_guard<std::mutex> _(_mtx);
+}
+
 void MemMonitorSetting::addToMonitor()
 {
     QTreeWidgetItem* item = selectedItem();
     if (!item) return;
 
     item->setIcon(0, QIcon(":/MemMonitorSetting/sel.png"));
-    ulong pid = item->text(2).toULong();
-    std::string pname = item->text(3).toStdString();
+    ulong pid = item->data(2, Qt::UserRole).toULongLong();
+    std::string pname = item->text(2).toStdString();
 
     {
         std::lock_guard<std::mutex> _lock(_mtx);
@@ -60,7 +64,7 @@ void MemMonitorSetting::removeFromMonitor()
 
     {
         std::lock_guard<std::mutex> _lock(_mtx);
-        _pmm->RemoveProc(item->text(2).toULong());
+        _pmm->RemoveProc(item->data(2, Qt::UserRole).toULongLong());
     }
 
     ui.label->setText(QString::number(_pmm->Procs().size()));
@@ -79,7 +83,7 @@ void MemMonitorSetting::onlySeeSelected(int s)
         {
             QTreeWidgetItem* item = ui.treeWidget->topLevelItem(i);
             int p = -1;
-            if (!_pmm->InMonitor(item->text(2).toULong(), p)) {
+            if (!_pmm->InMonitor(item->data(2, Qt::UserRole).toULongLong(), p)) {
                 item->setHidden(true);
             }
         }
@@ -94,8 +98,8 @@ void MemMonitorSetting::onlySeeSelected(int s)
 
 void MemMonitorSetting::showProcInfo(QTreeWidgetItem* item, int column)
 {
-    DWORD pid = item->text(2).toULong();
-    QString name = item->text(3);
+    DWORD pid = item->data(2, Qt::UserRole).toULongLong();
+    QString name = item->text(2);
     
     ui.proc_shower->setProc(pid, name);
 }
@@ -139,7 +143,7 @@ void MemMonitorSetting::killProcess()
     if (!item)
         return;
 
-    DWORD pid = item->text(2).toULong();
+    DWORD pid = item->data(2, Qt::UserRole).toULongLong();
     Proc proc(pid);
     proc.Terminate();
 
@@ -191,11 +195,12 @@ void MemMonitorSetting::init()
     for (auto p : procs)
     {
         int pos = -1;
-        auto item = new QTreeWidgetItem((QTreeWidget*)0, QStringList() << "" << "" << QString::number(p.first) << QString::fromStdString(p.second));
+        auto item = new QTreeWidgetItem((QTreeWidget*)0, QStringList() << "" << "" << QString::fromStdString(p.second));
         if (_pmm->InMonitor(p.first, pos))
             item->setIcon(0, QIcon(":/MemMonitorSetting/sel.png"));
         Proc pro(p.first);
         item->setIcon(1, QIcon(pro.getIcon()));
+        item->setData(2, Qt::UserRole, (unsigned long long)p.first);
         items.append(item);
     }
     ui.treeWidget->insertTopLevelItems(0, items);
@@ -226,9 +231,9 @@ void MemMonitorSetting::run()
                     pi.memory = proc.GetProcMemory();
                 }
             }
+            _pmm->Save();
         }
-        _pmm->Save();
-        Sleep(2000);
+        Sleep(200);
     }
 }
 
@@ -248,7 +253,7 @@ void MemMonitorSetting::popMenu(const QPoint& p)
 
     int pos = -1;
     QMenu menu;
-    if (!_pmm->InMonitor(item->text(2).toULong(), pos)) {
+    if (!_pmm->InMonitor(item->data(2, Qt::UserRole).toULongLong(), pos)) {
         QAction* atm = menu.addAction(QIcon(":/MemMonitorSetting/add.png"), QString::fromLocal8Bit("Ìí¼Ó¼à¿Ø"));
 
         connect(atm, &QAction::triggered, this, &MemMonitorSetting::addToMonitor);

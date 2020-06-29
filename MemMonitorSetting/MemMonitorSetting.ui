@@ -98,11 +98,6 @@
        </column>
        <column>
         <property name="text">
-         <string>pid</string>
-        </property>
-       </column>
-       <column>
-        <property name="text">
          <string>proc name</string>
         </property>
        </column>

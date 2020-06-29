@@ -12,7 +12,7 @@ class MemMonitorSetting : public QMainWindow
 
 public:
     MemMonitorSetting(QWidget *parent = Q_NULLPTR);
-
+    ~MemMonitorSetting();
 signals:
     void procInvalid(DWORD pid);
 private slots:
