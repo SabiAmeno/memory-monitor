@@ -9,11 +9,16 @@
 #include <vector>
 #include <fstream>
 #include <map>
+#include <ShlObj.h>
+#include <QPixmap>
+#include <QtWinExtras/qwinfunctions.h>
 
 std::vector<char> wchars2string(TCHAR* str);
+BOOL EnableDebugPrivilege();
 
 class Proc {
 public:
+    Proc() {}
     Proc(DWORD procid)
     {
         _initial(procid);
@@ -72,10 +77,43 @@ public:
 
         return pros;
     }
+
+    void Terminate()
+    {
+        EnableDebugPrivilege();
+        BOOL r = TerminateProcess(_handle, 0);
+        if (!r) {
+            auto err = GetLastError();
+        }
+    }
+
+    QPixmap getIcon()
+    {
+        QPixmap pix;
+
+        WCHAR path[1024] = { 0 };
+        DWORD psize = 1024;
+        BOOL r = QueryFullProcessImageName(_handle, 0, path, &psize);
+        if (r)
+        {
+            SHFILEINFOW sfi = { 0 };
+            HRESULT hr = SHGetFileInfo(path,
+                -1,
+                &sfi,
+                sizeof(sfi),
+                SHGFI_ICON | SHGFI_ADDOVERLAYS | SHGFI_EXETYPE | SHGFI_SMALLICON | SHGFI_TYPENAME);
+            if (SUCCEEDED(hr))
+            {
+                pix = QtWin::fromHICON(sfi.hIcon);
+            }
+        }
+
+        return pix;
+    }
 private:
     void _initial(DWORD procid)
     {
-        _handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, procid);
+        _handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, procid);
 
         if (NULL == _handle) {
             DWORD err = GetLastError();

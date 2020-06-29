@@ -1,4 +1,5 @@
 #include "mem.h"
+#include <iostream>
 
 std::vector<char> wchars2string(TCHAR* str)
 {
@@ -10,4 +11,23 @@ std::vector<char> wchars2string(TCHAR* str)
     }
 
     return buffer;
+}
+
+BOOL EnableDebugPrivilege()
+{
+    HANDLE hToken;
+    BOOL fOk = FALSE;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &hToken))
+    {
+        TOKEN_PRIVILEGES tp;
+        tp.PrivilegeCount = 1;
+        LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &tp.Privileges[0].Luid);
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+        AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
+
+        fOk = (GetLastError() == ERROR_SUCCESS);
+        CloseHandle(hToken);
+    }
+    return fOk;
 }

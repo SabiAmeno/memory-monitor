@@ -1,5 +1,11 @@
 <RCC>
     <qresource prefix="/MemMonitorSetting">
         <file>sel.png</file>
+        <file>resource.png</file>
+        <file>log.png</file>
+        <file>add.png</file>
+        <file>terminate.png</file>
+        <file>remove.png</file>
+        <file>refresh.png</file>
     </qresource>
 </RCC>

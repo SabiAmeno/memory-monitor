@@ -1,10 +1,17 @@
 #include "MemMonitorSetting.h"
 #include <QMenu>
+#include <QMessageBox>
 
 MemMonitorSetting::MemMonitorSetting(QWidget *parent)
     : QMainWindow(parent)
 {
     ui.setupUi(this);
+
+    setWindowIcon(QIcon(":/MemMonitorSetting/resource.png"));
+    setWindowTitle(QString::fromLocal8Bit("内存监控"));
+    _tray_icon = new QSystemTrayIcon(this);
+    _tray_icon->setIcon(QIcon(":/MemMonitorSetting/resource.png"));
+    _tray_icon->show();
 
     _pmm = new ProcMonitorManage();
     _pmm->SetPrinter(new FilePrinter());
@@ -12,12 +19,20 @@ MemMonitorSetting::MemMonitorSetting(QWidget *parent)
     init();
 
     ui.treeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    ui.treeWidget->setColumnWidth(0, 50);
+    ui.treeWidget->setColumnWidth(0, 30);
+    ui.treeWidget->setColumnWidth(1, 30);
+    ui.treeWidget->setColumnWidth(2, 50);
 
     _thr = new std::thread(&MemMonitorSetting::run, this);
 
     connect(ui.treeWidget, &QTreeWidget::customContextMenuRequested, this, &MemMonitorSetting::popMenu);
     connect(ui.checkBox, &QCheckBox::stateChanged, this, &MemMonitorSetting::onlySeeSelected);
+    connect(ui.treeWidget, &QTreeWidget::itemClicked, this, &MemMonitorSetting::showProcInfo);
+    connect(ui.actionOpenLog, &QAction::triggered, this, &MemMonitorSetting::showLog);
+    connect(this, &MemMonitorSetting::procInvalid, this, &MemMonitorSetting::procInvalidProcess, Qt::QueuedConnection);
+    connect(ui.actionRefresh, &QAction::triggered, this, &MemMonitorSetting::procRefresh);
+
+    connect(_tray_icon, &QSystemTrayIcon::activated, this, &MemMonitorSetting::trayIconActived);
 }
 
 void MemMonitorSetting::addToMonitor()
@@ -26,12 +41,13 @@ void MemMonitorSetting::addToMonitor()
     if (!item) return;
 
     item->setIcon(0, QIcon(":/MemMonitorSetting/sel.png"));
-    ulong pid = item->text(1).toULong();
-    std::string pname = item->text(2).toStdString();
+    ulong pid = item->text(2).toULong();
+    std::string pname = item->text(3).toStdString();
 
-    std::lock_guard<std::mutex> _lock(_mtx);
-    _pmm->AddProc(ProcInfo{ pid, pname, 0 });
-
+    {
+        std::lock_guard<std::mutex> _lock(_mtx);
+        _pmm->AddProc(ProcInfo{ pid, pname, 0 });
+    }
     ui.label->setText(QString::number(_pmm->Procs().size()));
 }
 
@@ -42,8 +58,10 @@ void MemMonitorSetting::removeFromMonitor()
 
     item->setIcon(0, QIcon());
 
-    std::lock_guard<std::mutex> _lock(_mtx);
-    _pmm->RemoveProc(item->text(1).toULong());
+    {
+        std::lock_guard<std::mutex> _lock(_mtx);
+        _pmm->RemoveProc(item->text(2).toULong());
+    }
 
     ui.label->setText(QString::number(_pmm->Procs().size()));
 
@@ -61,7 +79,7 @@ void MemMonitorSetting::onlySeeSelected(int s)
         {
             QTreeWidgetItem* item = ui.treeWidget->topLevelItem(i);
             int p = -1;
-            if (!_pmm->InMonitor(item->text(1).toULong(), p)) {
+            if (!_pmm->InMonitor(item->text(2).toULong(), p)) {
                 item->setHidden(true);
             }
         }
@@ -74,6 +92,97 @@ void MemMonitorSetting::onlySeeSelected(int s)
     }
 }
 
+void MemMonitorSetting::showProcInfo(QTreeWidgetItem* item, int column)
+{
+    DWORD pid = item->text(2).toULong();
+    QString name = item->text(3);
+    
+    ui.proc_shower->setProc(pid, name);
+}
+
+void MemMonitorSetting::showLog()
+{
+    ProcInfoLog pil;
+    pil.show(_pmm);
+    pil.exec();
+}
+
+void MemMonitorSetting::procInvalidProcess(DWORD pid)
+{
+    std::lock_guard<std::mutex> _lock(_mtx);
+    _pmm->RemoveProc(pid);
+
+    procRefresh();
+}
+
+void MemMonitorSetting::procRefresh()
+{
+//    _pmm->Reset();
+    int items = ui.treeWidget->topLevelItemCount();
+    for (int i = items - 1; i > -1; --i)
+        ui.treeWidget->takeTopLevelItem(i);
+    
+    init();
+}
+
+void MemMonitorSetting::killProcess()
+{
+    auto button = QMessageBox::information(
+        nullptr,
+        QString::fromLocal8Bit("提示"),
+        QString::fromLocal8Bit("确定要终止该进程吗?"),
+        QMessageBox::Ok | QMessageBox::Cancel);
+    if (button != QMessageBox::Ok)
+        return;
+
+    auto item = selectedItem();
+    if (!item)
+        return;
+
+    DWORD pid = item->text(2).toULong();
+    Proc proc(pid);
+    proc.Terminate();
+
+    int p = -1;
+    if (_pmm->InMonitor(pid, p))
+        _pmm->RemoveProc(pid);
+
+    procRefresh();
+}
+
+void MemMonitorSetting::trayIconActived(QSystemTrayIcon::ActivationReason reason)
+{
+    switch (reason)
+    {
+    case QSystemTrayIcon::Unknown:
+        break;
+    case QSystemTrayIcon::Context:
+    {
+        QMenu menu;
+        QAction* exit = menu.addAction("Exit");
+
+        connect(exit, &QAction::triggered, this, [&]() {close(); });
+        menu.move(cursor().pos());
+        menu.exec();
+        break;
+    }
+    case QSystemTrayIcon::DoubleClick:
+    case QSystemTrayIcon::Trigger:
+        show();
+        raise();
+        break;
+    case QSystemTrayIcon::MiddleClick:
+        break;
+    default:
+        break;
+    }
+}
+
+void MemMonitorSetting::hideEvent(QHideEvent* e)
+{
+    hide();
+}
+
 void MemMonitorSetting::init()
 {
     auto procs = Proc::GetProcs();
@@ -81,9 +190,17 @@ void MemMonitorSetting::init()
 
     for (auto p : procs)
     {
-        items.append(new QTreeWidgetItem((QTreeWidget*)0, QStringList() << QString() << QString::number(p.first) << QString::fromStdString(p.second)));
+        int pos = -1;
+        auto item = new QTreeWidgetItem((QTreeWidget*)0, QStringList() << "" << "" << QString::number(p.first) << QString::fromStdString(p.second));
+        if (_pmm->InMonitor(p.first, pos))
+            item->setIcon(0, QIcon(":/MemMonitorSetting/sel.png"));
+        Proc pro(p.first);
+        item->setIcon(1, QIcon(pro.getIcon()));
+        items.append(item);
     }
     ui.treeWidget->insertTopLevelItems(0, items);
+
+    onlySeeSelected(Qt::Checked);
 }
 
 void MemMonitorSetting::run()
@@ -92,11 +209,19 @@ void MemMonitorSetting::run()
     {
         {
             std::lock_guard<std::mutex> _lock(_mtx);
+            auto procs = Proc::GetProcs();
             for (auto p : _pmm->Procs())
             {
-                int pos = -1;
+                auto it = procs.find(p.procid);
+                if (it == procs.end())
+                {
+                    emit procInvalid(p.procid);
+                    continue;
+                }
                 Proc proc(p.procid);
-                if (proc.IsValid() && (*_pmm).InMonitor(p.procid, pos)) {
+                int pos = -1;
+
+                if ((*_pmm).InMonitor(p.procid, pos)) {
                     ProcInfo& pi = (*_pmm)[pos];
                     pi.memory = proc.GetProcMemory();
                 }
@@ -123,16 +248,19 @@ void MemMonitorSetting::popMenu(const QPoint& p)
 
     int pos = -1;
     QMenu menu;
-    if (!_pmm->InMonitor(item->text(1).toULong(), pos)) {
-        QAction* atm = menu.addAction("add to monitor");
+    if (!_pmm->InMonitor(item->text(2).toULong(), pos)) {
+        QAction* atm = menu.addAction(QIcon(":/MemMonitorSetting/add.png"), QString::fromLocal8Bit("添加监控"));
 
         connect(atm, &QAction::triggered, this, &MemMonitorSetting::addToMonitor);
     } else {
-        QAction* rtm = menu.addAction("remove from monitor");
+        QAction* rtm = menu.addAction(QIcon(":/MemMonitorSetting/remove.png"), QString::fromLocal8Bit("移除监控"));
 
         connect(rtm, &QAction::triggered, this, &MemMonitorSetting::removeFromMonitor);
     }
 
-    menu.move(mapToGlobal(p));
+    QAction* killp = menu.addAction(QIcon(":/MemMonitorSetting/terminate.png"), QString::fromLocal8Bit("终止进程"));
+    connect(killp, &QAction::triggered, this, &MemMonitorSetting::killProcess);
+
+    menu.move(cursor().pos());
     menu.exec();
 }
