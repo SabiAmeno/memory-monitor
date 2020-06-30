@@ -8,6 +8,7 @@ ProcInfoShower::ProcInfoShower(QWidget *parent)
     _timer.setInterval(2000);
 
     connect(&_timer, &QTimer::timeout, this, &ProcInfoShower::timeout);
+    connect(ui.toolButton, &QToolButton::clicked, this, [&] {emit showGraph(_pid); });
 }
 
 ProcInfoShower::~ProcInfoShower()
@@ -18,6 +19,7 @@ ProcInfoShower::~ProcInfoShower()
 
 void ProcInfoShower::setProc(ulong pid, const QString& name)
 {
+    _pid = pid;
     _timer.stop();
     if(_proc)
         delete _proc;

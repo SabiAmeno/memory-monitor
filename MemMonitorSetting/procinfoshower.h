@@ -16,12 +16,16 @@ public:
     ~ProcInfoShower();
 
     void setProc(ulong pid, const QString& name);
-
+  
+signals:
+    void showGraph(unsigned long pid);
 private slots:
     void timeout();
+  
 private:
     Ui::procinfoshower ui;
 
+    unsigned long _pid;
     QTimer _timer;
     Proc* _proc;
 };

@@ -1,6 +1,7 @@
 #include "MemMonitorSetting.h"
 #include <QMenu>
 #include <QMessageBox>
+#include "memgraph.h"
 
 MemMonitorSetting::MemMonitorSetting(QWidget *parent)
     : QMainWindow(parent)
@@ -12,6 +13,8 @@ MemMonitorSetting::MemMonitorSetting(QWidget *parent)
     _tray_icon = new QSystemTrayIcon(this);
     _tray_icon->setIcon(QIcon(":/MemMonitorSetting/resource.png"));
     _tray_icon->show();
+
+    ui.stackedWidget->hide();
 
     _pmm = new ProcMonitorManage();
     _pmm->SetPrinter(new FilePrinter());
@@ -32,6 +35,8 @@ MemMonitorSetting::MemMonitorSetting(QWidget *parent)
     connect(ui.actionRefresh, &QAction::triggered, this, &MemMonitorSetting::procRefresh);
 
     connect(_tray_icon, &QSystemTrayIcon::activated, this, &MemMonitorSetting::trayIconActived);
+    connect(this, &MemMonitorSetting::shotMemData, ui.widget, &MemGraph::appendData, Qt::QueuedConnection);
+    connect(ui.proc_shower, &ProcInfoShower::showGraph, this, &MemMonitorSetting::showMemGraph);
 }
 
 MemMonitorSetting::~MemMonitorSetting()
@@ -50,6 +55,7 @@ void MemMonitorSetting::addToMonitor()
 
     {
         std::lock_guard<std::mutex> _lock(_mtx);
+        _hisd.add(pid);
         _pmm->AddProc(ProcInfo{ pid, pname, 0 });
     }
     ui.label->setText(QString::number(_pmm->Procs().size()));
@@ -61,10 +67,12 @@ void MemMonitorSetting::removeFromMonitor()
     if (!item) return;
 
     item->setIcon(0, QIcon());
+    unsigned long pid = item->data(2, Qt::UserRole).toULongLong();
 
     {
         std::lock_guard<std::mutex> _lock(_mtx);
-        _pmm->RemoveProc(item->data(2, Qt::UserRole).toULongLong());
+        _pmm->RemoveProc(pid);
+        _hisd.remove(pid);
     }
 
     ui.label->setText(QString::number(_pmm->Procs().size()));
@@ -99,8 +107,16 @@ void MemMonitorSetting::onlySeeSelected(int s)
 void MemMonitorSetting::showProcInfo(QTreeWidgetItem* item, int column)
 {
     DWORD pid = item->data(2, Qt::UserRole).toULongLong();
+    int pos = -1;
+
+    if (!_pmm->InMonitor(pid, pos)) {
+        ui.stackedWidget->hide();
+        return;
+    }
+    ui.stackedWidget->show();
     QString name = item->text(2);
     
+    ui.stackedWidget->setCurrentIndex(1);
     ui.proc_shower->setProc(pid, name);
 }
 
@@ -153,7 +169,8 @@ void MemMonitorSetting::killProcess()
     if (_pmm->InMonitor(pid, p))
         _pmm->RemoveProc(pid);
 
-    procRefresh();
+   // procRefresh();
+    ui.treeWidget->takeTopLevelItem(ui.treeWidget->indexOfTopLevelItem(item));
 }
 
 void MemMonitorSetting::trayIconActived(QSystemTrayIcon::ActivationReason reason)
@@ -182,6 +199,20 @@ void MemMonitorSetting::trayIconActived(QSystemTrayIcon::ActivationReason reason
     default:
         break;
     }
+}
+
+void MemMonitorSetting::showMemGraph(unsigned long pid)
+{
+    ui.stackedWidget->setCurrentIndex(0);
+    auto data = _hisd.data(pid);
+
+    ui.widget->setPID(pid);
+    ui.widget->setData(data.data());
+//    MemGraph* mg = new MemGraph(pid);
+ //   mg->setData(data.data());
+
+//    connect(this, &MemMonitorSetting::shotMemData, mg, &MemGraph::appendData, Qt::QueuedConnection);
+//    mg->show();
 }
 
 void MemMonitorSetting::hideEvent(QHideEvent* e)
@@ -231,6 +262,8 @@ void MemMonitorSetting::run()
                 if ((*_pmm).InMonitor(p.procid, pos)) {
                     ProcInfo& pi = (*_pmm)[pos];
                     pi.memory = proc.GetProcMemory();
+                    _hisd.appendData(p.procid, pi.memory);
+                    emit shotMemData(p.procid, pi.memory);
                 }
             }
             _pmm->Save();
@@ -261,8 +294,10 @@ void MemMonitorSetting::popMenu(const QPoint& p)
         connect(atm, &QAction::triggered, this, &MemMonitorSetting::addToMonitor);
     } else {
         QAction* rtm = menu.addAction(QIcon(":/MemMonitorSetting/remove.png"), QString::fromLocal8Bit("移除监控"));
+       // QAction* memshow = menu.addAction(QIcon(""), QString::fromLocal8Bit("内存占用曲线"));
 
         connect(rtm, &QAction::triggered, this, &MemMonitorSetting::removeFromMonitor);
+        //connect(memshow, &QAction::triggered, this, &MemMonitorSetting::showMemGraph);
     }
 
     QAction* killp = menu.addAction(QIcon(":/MemMonitorSetting/terminate.png"), QString::fromLocal8Bit("终止进程"));

@@ -30,6 +30,8 @@ public:
             CloseHandle(_handle);
     }
 
+
+
     bool IsValid() { return _handle != NULL; }
     std::string GetProcName()
     {
